@@ -80,10 +80,92 @@ Para fazer isso, iremos usar o driver JDBC assim como foi ensinado durante as au
     # Exportando o dataframe para o banco de dados
     df_brazil.write.format("jdbc").option("url","jdbc:postgresql://172.30.0.254:5432/").option("dbtable","atletas_brasil").option("user","postgres").option("password","spark").option("driver","org.postgresql.Driver").save()
 
-## Instalação do Kafka
-Para instalar o Kafka, iremos utilizar o passo a passo também disponibilizado pelo professor durante as aulas.
+## Instalação e configuração do Kafka
+Para instalar o Kafka, iremos utilizar o passo a passo também disponibilizado pelo professor durante as aulas. O arquivo para instalar o mesmo vai estar disponícel no repositório como: Exemplos_kafka.txt
 
-    # Download do Apache Kafka
-    wget -nc https://archive.apache.org/dist/kafka/3.4.1/kafka_2.12-3.4.1.tgz
+### Configuração do kafka
 
+Para configurar o kafka, taambém foi seguido o tutorial para configuração, porém vale lembrar alguns comandos:
+
+    # Mesmo depois de configurado, sempre que iniciar o node-master, precisamos usar os seguintes comandos para carregar o kafka
+
+    # Configurar as variáveis de ambiente no .bashrc
+    export KAFKA_HOME="/home/spark/kafka"
+    export PATH="$PATH:$KAFKA_HOME/bin"
+
+    # Carregar o .bashrc
+    source ~/.bashrc
+
+    # Comando para iniciar o servidor kafka
+    kafka-server-start.sh $KAFKA_HOME/config/kraft/server.properties
+
+    # Como criar um tópico
+    kafka-topics.sh --create --topic meu-topico --bootstrap-server node-master:9092
+
+### Usando o debezium para monitorar um banco de dados
+Iremos utilizar o debezium junto com o kafka para monitorar o banco de dados postgres. Foi seguido o passo a passo do exemplo 3 para realizar essa parte do trabalho:
+
+    # Importando funções
+    from pyspark.sql.functions import *
+    from pyspark.sql.types import *
     
+    # Criar o dataframe do tipo stream, apontando para o servidor kafka e o tópico a ser consumido
+    df = (spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", "node-master:9092")
+        .option("subscribe", "meu-topico.public.minhatabela2")
+        .option("startingOffsets", "earliest")
+        .load()
+    )
+
+    # Definir o schema dos dados inseridos no tópico
+    schema = StructType([
+    StructField("payload", StructType([
+        StructField("after", StructType([
+            StructField("code", IntegerType(), True),
+            StructField("name", StringType(), True),
+            StructField("name_short", StringType(), True),
+            StructField("name_tv", StringType(), True),
+            StructField("gender", StringType(), True),
+            StructField("country", StringType(), True),
+            StructField("country_full", StringType(), True),
+            StructField("nationality", StringType(), True),
+            StructField("nationality_code", StringType(), True),
+            StructField("height", IntegerType(), True),
+            StructField("weight", DoubleType(), True),
+            StructField("disciplines", StringType(), True),
+            StructField("lang", StringType(), True)
+            ]))
+         ]))
+    ])
+
+    # Converter o valor dos dados do Kafka de formato binário para JSON usando a função from_json
+    dx = df.select(from_json(df.value.cast("string"), schema).alias("data")).select("data.payload.after.*")
+
+    # Realizar as transformações e operações desejadas no DataFrame 'df'
+    # Neste exemplo, apenas vamos imprimir os dados em tela
+    ds = (dx.writeStream 
+        .outputMode("append") 
+        .format("console")
+        .option("truncate", False)
+        .start()
+    )
+
+Com isso, o kafka vai estar monitorando o banco de dados e qualquer dado inserido, vai ser mostrado em tela se o comando anterior estiver sendo executado ainda.
+
+Para ilustrar iremos inserir um dado no postgres como exemplo visual. A saída do último comando mostrado pode ser vista na imagem a seguir:
+
+![](img/monitoramento_antes.png)
+
+Agora, iremos entrar dentro do banco de dados e inserir uma nova linha na tabela atletas_brasil, com o seguinte comando:    
+
+    INSERT INTO atletas_brasil (code, name, name_short, name_tv, gender, country, country_full, nationality, nationality_code, height, weight, disciplines, lang)
+    VALUES (123, 'Paulo Ricardo Dantas', 'Paulo Dantas', 'Dantas', 'male', 'Brazil', 'Brazil', 'Brazil', 'BRA', 187, 0.0, 'Basketball', 'Portuguese');
+
+Automaticamente, o terminal em que o Kafka está sendo executado irá mostrar uma nova saída, que vai ser mostrada na imagem a seguir:
+![](img/monitoramento_depois.png)
+
+Com isso, terminamos a parte de configuração do kafka.
+
+## Airflow
+Devido a dificuldade com a ferramente, não conseguimos implementar o airflow dentro do nosso trabalho
