@@ -40,7 +40,7 @@ Com o csv no sistema de arquivos, então podemos começar a usar o spark para ma
 Antes de continuar com a parte de separar, vamos reduzir algumas colunas do dataset que possuam muitos dados nulos ou que possuam informações desnecessárias para o projeto.
 
     # Escolhendo as colunas para remover
-    colunas_a_excluir = ["function", "country_code", "country_long", "nationality_full", "events", "birth_date", "birth_place", "birth_country", "residence_place", "residence_country", "nickname", "hobbies", "occupation", "education", "family", "coach", "reason", "hero", "influence", "philosophy", "sporting_relatives", "ritual", "other_sports"]
+    colunas_a_excluir = ["function", "country_code", "country_long", "nationality_full", "events", "birth_date", "birth_place", "birth_country", "residence_place", "residence_country", "nickname", "hobbies", "occupation", "education", "family", "coach", "reason", "hero", "influence", "philosophy", "sporting_relatives", "ritual", "other_sports", "disciplines", "lang"]
 
     # Criando novo DataFrame sem as colunas
     df_reduzido = df.drop(*colunas_a_excluir)
@@ -63,11 +63,36 @@ Antes de continuar com a parte de separar, vamos reduzir algumas colunas do data
 Como estamos usando o HDFS, o coalesce(1) serve para que o arquivo resultante esteja em apenas uma parte. Essas partes vão ser renomeadas como brazil_athletes.csv e other_athletes.csv respectivamente.
 
 
+### Armazenando os atletas brasileiros no postgres
 
+Vamos armazenar os dados dos atletas Brasileiros no banco de dados Postgres que já vem instalado no container que estamos utilizando, para isso iremos seguir o seguinte passo a passo:
 
-# Comando para conectar no banco de dados
-sudo service postgresql start
+    # Dentro do container node-master, precisamos usar o seguinte comando para iniciar o postgre
+    sudo service postgresql start
 
-sudo -i -u postgres
+    # Mudar para o usuário postgres
+    sudo -i -u postgres
 
-psql
+    # Entrando dentro do banco
+    psql
+
+Com o Postgres iniciado, iremos entrar dentro do banco e executar os seguintes comandos:
+
+    # Criando a tabela atletas_brasil
+    CREATE TABLE atletas_brasil (
+        code INTEGER,
+        name VARCHAR(255),
+        name_short VARCHAR(255),
+        name_tv VARCHAR(255),
+        gender VARCHAR(10),
+        country VARCHAR(255),
+        country_full VARCHAR(255),
+        nationality VARCHAR(50),
+        nationality_code VARCHAR(50),
+        height INTEGER,
+        weight REAL
+    );
+
+    # Copiando os arquivos do CSV para dentro do postgres
+
+    \COPY atletas_brasil FROM '/var/lib/postgresql/brazil_athletes.csv' DELIMITER ';' CSV HEADER;
